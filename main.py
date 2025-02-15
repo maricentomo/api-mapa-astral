@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List, Dict, Optional
-import swisseph as swe  # Certifique-se de instalar essa biblioteca depois
+#import swisseph as swe  # Comentado para evitar erros, já que estamos simulando os dados
 
 app = FastAPI(
     title="API de Mapa Astral",
@@ -41,49 +41,13 @@ class QuestionRequest(BaseModel):
 # ========= Função de Cálculo =========
 
 def calculate_astrological_positions(birth_data: BirthData) -> List[PlanetPosition]:
-    try:
-        day, month, year = map(int, birth_data.date.split('/'))
-        hour, minute = map(int, birth_data.time.split(':'))
-    except Exception:
-        raise HTTPException(status_code=400, detail="Formato de data/hora inválido.")
-
-    ut = hour + minute / 60.0
-    jd = swe.julday(year, month, day, ut)
-
-    # Defina o caminho para os arquivos de efemérides (se necessário)
-    swe.set_ephe_path('/path/to/ephemeris')  # Ajuste esse caminho se for preciso
-
-    # Códigos dos planetas conforme pyswisseph
-    planets = {
-        "Sol": swe.SUN,
-        "Lua": swe.MOON,
-        "Mercúrio": swe.MERCURY,
-        "Vênus": swe.VENUS,
-        "Marte": swe.MARS,
-        "Júpiter": swe.JUPITER,
-        "Saturno": swe.SATURN,
-        "Urano": swe.URANUS,
-        "Netuno": swe.NEPTUNE,
-        "Plutão": swe.PLUTO,
-    }
-
-    zodiac_signs = [
-        "Áries", "Touro", "Gêmeos", "Câncer", "Leão", "Virgem",
-        "Libra", "Escorpião", "Sagitário", "Capricórnio", "Aquário", "Peixes"
+    # Dados simulados para teste - ignorando pyswisseph
+    dummy_positions = [
+        PlanetPosition(planet="Sol", sign="Áries", degree=10.5, house=1),
+        PlanetPosition(planet="Lua", sign="Touro", degree=15.2, house=2),
+        PlanetPosition(planet="Mercúrio", sign="Gêmeos", degree=5.0, house=3)
     ]
-
-    positions = []
-    for planet_name, planet_code in planets.items():
-        pos, ret = swe.calc(jd, planet_code)
-        if ret != swe.OK:
-            raise HTTPException(status_code=500, detail=f"Erro ao calcular {planet_name}.")
-        longitude = pos[0]
-        sign_index = int(longitude // 30)
-        sign = zodiac_signs[sign_index]
-        degree = longitude % 30
-        positions.append(PlanetPosition(planet=planet_name, sign=sign, degree=degree))
-    
-    return positions
+    return dummy_positions
 
 # ========= Endpoints =========
 
