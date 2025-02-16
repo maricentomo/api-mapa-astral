@@ -6,7 +6,7 @@ import swisseph as swe
 app = FastAPI(
     title="API de Mapa Astral",
     description="API para cálculo e interpretação de mapas astrológicos.",
-    version="1.0"
+    version="1.1"
 )
 
 # ========= Modelos de Dados =========
@@ -32,20 +32,17 @@ class MapResult(BaseModel):
 
 def calculate_astrological_positions(birth_data: BirthData) -> List[PlanetPosition]:
     try:
-        # Converte a data e a hora para números inteiros
         day, month, year = map(int, birth_data.date.split('/'))
         hour, minute = map(int, birth_data.time.split(':'))
     except Exception:
         raise HTTPException(status_code=400, detail="Formato de data/hora inválido.")
 
-    # Calcula o tempo universal (UT) e o dia juliano
     ut = hour + minute / 60.0
     jd = swe.julday(year, month, day, ut)
 
-    # Define o caminho para os arquivos de efemérides (ajuste esse caminho corretamente!)
+    # Define o caminho para os arquivos de efemérides (ajuste conforme necessário)
     swe.set_ephe_path('./ephemeris')
 
-    # Lista de planetas e seus códigos na biblioteca pyswisseph
     planets = {
         "Sol": swe.SUN,
         "Lua": swe.MOON,
@@ -59,7 +56,6 @@ def calculate_astrological_positions(birth_data: BirthData) -> List[PlanetPositi
         "Plutão": swe.PLUTO,
     }
 
-    # Lista dos signos do zodíaco
     zodiac_signs = [
         "Áries", "Touro", "Gêmeos", "Câncer", "Leão", "Virgem",
         "Libra", "Escorpião", "Sagitário", "Capricórnio", "Aquário", "Peixes"
@@ -68,14 +64,14 @@ def calculate_astrological_positions(birth_data: BirthData) -> List[PlanetPositi
     positions = []
     for planet_name, planet_code in planets.items():
         pos, ret = swe.calc(jd, planet_code)
-        if ret != swe.OK:
+        if ret < 0:  # Se o cálculo falhar, levanta uma exceção
             raise HTTPException(status_code=500, detail=f"Erro ao calcular {planet_name}.")
         longitude = pos[0]
         sign_index = int(longitude // 30)
         sign = zodiac_signs[sign_index]
         degree = longitude % 30
         positions.append(PlanetPosition(planet=planet_name, sign=sign, degree=degree))
-    
+
     return positions
 
 # ========= Endpoint =========
@@ -92,3 +88,4 @@ async def read_root():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
