@@ -3,3 +3,4 @@ uvicorn
 pyswisseph
 requests
 timezonefinder==6.5.7
+pytz
