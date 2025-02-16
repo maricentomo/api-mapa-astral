@@ -10,8 +10,12 @@ import pytz
 app = FastAPI(
     title="API de Mapa Astral",
     description="API para cálculo e interpretação de mapas astrológicos com ajuste automático de fuso horário.",
-    version="7.0"
+    version="7.0",
+    servers=[
+        {"url": "https://api-mapa-astral.onrender.com", "description": "Servidor de Produção"}
+    ]
 )
+
 
 # ========= Modelos de Dados =========
 
