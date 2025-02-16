@@ -2,4 +2,5 @@ fastapi
 uvicorn
 pyswisseph
 requests
+timezonefinder==6.4.3
 
