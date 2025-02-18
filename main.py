@@ -9,8 +9,8 @@ import pytz
 
 app = FastAPI(
     title="API de Mapa Astral",
-    description="API para cálculo e interpretação de mapas astrológicos com Quíron, Lilith, Nodos, casas com orbe de transição e aspectos com orbes específicas.",
-    version="9.0",
+    description="API para cálculo e interpretação de mapas astrológicos com Quíron, Lilith, Nodos, casas com orbe de transição, aspectos com orbes específicas e retrogradação.",
+    version="9.1",
     servers=[
         {"url": "https://api-mapa-astral.onrender.com", "description": "Servidor de Produção"}
     ]
@@ -29,6 +29,7 @@ class PlanetPosition(BaseModel):
     sign: str
     degree: float
     house: int
+    retrograde: bool = False  # <-- DETECÇÃO DE RETROGRADAÇÃO
 
 class HouseInfo(BaseModel):
     house: int
@@ -131,10 +132,8 @@ def find_house_with_orb(planet_long: float, houses: List[float]) -> int:
             # Caso não cruza 360
             if cusp_start <= planet_long < cusp_end:
                 nominal_house = i + 1
-                # Distância até o final desta casa
                 distance_to_next = cusp_end - planet_long
                 next_house_id = ((i + 1) % 12) + 1
-                # Orbe = 8° se for casa 1 ou 10, senão 6°
                 orb = 8 if next_house_id in [1, 10] else 6
                 if distance_to_next <= orb:
                     return next_house_id
@@ -210,7 +209,6 @@ def calculate_elements(positions: List[PlanetPosition]) -> Dict[str, int]:
     for p in positions:
         if p.planet in ["Quíron", "Lilith", "NóduloNorte", "NóduloSul"]:
             continue
-        # Descobrir elemento
         elem = element_map[p.sign]
         peso = 2 if p.planet in dois_pontos else 1
         counts[elem] += peso
@@ -254,17 +252,21 @@ def calculate_map(birth_data: BirthData) -> MapResult:
         pos, ret = swe.calc(jd, code)
         if ret < 0:
             raise HTTPException(status_code=500, detail=f"Erro ao calcular {planet_name}")
-        longit = pos[0]
-        sign_idx = int(longit // 30)
+        longitude = pos[0]
+        speed_long = pos[3]                  # <--- VELOCIDADE EM LONGITUDE
+        is_retro = (speed_long < 0)          # <--- RETRÓGRADO SE VELOCIDADE NEGATIVA
+
+        sign_idx = int(longitude // 30)
         sign = zodiac_signs[sign_idx]
-        deg = longit % 30
-        planet_house = find_house_with_orb(longit, houses)
+        deg = longitude % 30
+        planet_house = find_house_with_orb(longitude, houses)
 
         positions.append(PlanetPosition(
             planet=planet_name,
             sign=sign,
             degree=round(deg, 2),
-            house=planet_house
+            house=planet_house,
+            retrograde=is_retro            # <--- ATRIBUI O STATUS AQUI
         ))
 
     # NóduloSul = NóduloNorte + 180° (mod 360)
@@ -277,14 +279,16 @@ def calculate_map(birth_data: BirthData) -> MapResult:
         south_deg_in_sign = south_deg % 30
         # Determinar casa do nodo sul
         nodo_sul_house = find_house_with_orb(south_deg, houses)
+        # NóduloSul não tem velocidade, então retrograde=False
         positions.append(PlanetPosition(
             planet="NóduloSul",
             sign=south_sign,
             degree=round(south_deg_in_sign, 2),
-            house=nodo_sul_house
+            house=nodo_sul_house,
+            retrograde=False
         ))
 
-    # Calcular Asc e MC como planetas especiais
+    # Calcular Asc e MC como 'planetas' especiais (retrograde=False)
     # asc_mc[0] = Asc, asc_mc[1] = MC
     asc_long = asc_mc[0]
     asc_sign_idx = int(asc_long // 30)
@@ -295,7 +299,8 @@ def calculate_map(birth_data: BirthData) -> MapResult:
         planet="Ascendente",
         sign=asc_sign,
         degree=round(asc_deg, 2),
-        house=asc_house
+        house=asc_house,
+        retrograde=False
     ))
 
     mc_long = asc_mc[1]
@@ -307,7 +312,8 @@ def calculate_map(birth_data: BirthData) -> MapResult:
         planet="MeioCéu",
         sign=mc_sign,
         degree=round(mc_deg, 2),
-        house=mc_house
+        house=mc_house,
+        retrograde=False
     ))
 
     # 6) Calcular aspectos
