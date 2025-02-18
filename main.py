@@ -9,8 +9,8 @@ import pytz
 
 app = FastAPI(
     title="API de Mapa Astral",
-    description="API para cálculo e interpretação de mapas astrológicos com Quíron, Lilith, Nodos, casas com orbe de transição, aspectos com orbes específicas e retrogradação.",
-    version="9.1",
+    description="API com Quíron, Lilith, Nodos, casas com orbe para planetas e sem orbe para Nodos, aspectos, e retrogradação.",
+    version="10.0",
     servers=[
         {"url": "https://api-mapa-astral.onrender.com", "description": "Servidor de Produção"}
     ]
@@ -29,7 +29,7 @@ class PlanetPosition(BaseModel):
     sign: str
     degree: float
     house: int
-    retrograde: bool = False  # <-- DETECÇÃO DE RETROGRADAÇÃO
+    retrograde: bool = False
 
 class HouseInfo(BaseModel):
     house: int
@@ -63,9 +63,7 @@ element_map = {
     "Câncer": "Água", "Escorpião": "Água", "Peixes": "Água"
 }
 
-# ========= Corpos Principais: Inclui Quíron, Lilith, Nodos e ASC/MC =========
-# NóduloNorte = swe.TRUE_NODE (ou swe.NORTH_NODE); NóduloSul será calculado manualmente
-
+# ========= Corpos Principais (Quíron, Lilith, Nodos etc.) =========
 PLANETS_SWEPH = {
     "Sol": swe.SUN,
     "Lua": swe.MOON,
@@ -80,7 +78,7 @@ PLANETS_SWEPH = {
     "Quíron": swe.CHIRON,
     "Lilith": swe.MEAN_APOG,      # Lilith Média
     "NóduloNorte": swe.TRUE_NODE
-    # NóduloSul será +180° do NóduloNorte
+    # NóduloSul será +180° do NóduloNorte manualmente
 }
 
 # ========= Geocodificação e Fuso Horário =========
@@ -105,7 +103,6 @@ def get_timezone(latitude: float, longitude: float):
         raise HTTPException(status_code=500, detail="Não foi possível determinar o fuso horário.")
 
 def convert_to_ut(date_str: str, time_str: str, timezone_str: str):
-    """Converte horário local para UT."""
     try:
         local_tz = pytz.timezone(timezone_str)
         local_time = datetime.strptime(f"{date_str} {time_str}", "%d/%m/%Y %H:%M")
@@ -115,11 +112,12 @@ def convert_to_ut(date_str: str, time_str: str, timezone_str: str):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Erro ao converter horário: {e}")
 
-# ========= Funções para Casas, Orbe de Transição e Aspectos =========
+# ========= Funções para Casas, Orbe de Transição (Planetas) e Aspectos =========
 
 def find_house_with_orb(planet_long: float, houses: List[float]) -> int:
     """
-    Determina em qual casa está o planeta, considerando:
+    Determina em qual casa está o planeta (Sol, Lua, Mercúrio...),
+    considerando:
       - 6° de orbe para casas comuns
       - 8° de orbe para casa 1 (Asc) ou casa 10 (MC)
     """
@@ -127,33 +125,45 @@ def find_house_with_orb(planet_long: float, houses: List[float]) -> int:
         cusp_start = houses[i]
         cusp_end = houses[(i + 1) % 12]
 
-        # Nominal: planet_long está entre cusp_start e cusp_end (com wrap)
         if cusp_start <= cusp_end:
-            # Caso não cruza 360
+            # casa normal (não cruza 360)
             if cusp_start <= planet_long < cusp_end:
                 nominal_house = i + 1
-                distance_to_next = cusp_end - planet_long
+                dist_next = cusp_end - planet_long
                 next_house_id = ((i + 1) % 12) + 1
                 orb = 8 if next_house_id in [1, 10] else 6
-                if distance_to_next <= orb:
+                if dist_next <= orb:
                     return next_house_id
                 return nominal_house
-
         else:
             # cruza 360
             if planet_long >= cusp_start or planet_long < cusp_end:
                 nominal_house = i + 1
                 if planet_long >= cusp_start:
-                    distance_to_next = (cusp_end + 360) - planet_long if cusp_end < planet_long else 0
+                    dist_next = (cusp_end + 360) - planet_long if cusp_end < planet_long else 0
                 else:
-                    distance_to_next = cusp_end - planet_long
+                    dist_next = cusp_end - planet_long
                 next_house_id = ((i + 1) % 12) + 1
                 orb = 8 if next_house_id in [1, 10] else 6
-                if 0 < distance_to_next <= orb:
+                if 0 < dist_next <= orb:
                     return next_house_id
                 return nominal_house
+    return 1
 
-    # fallback
+def find_house_nominal(planet_long: float, houses: List[float]) -> int:
+    """
+    Determina a casa sem aplicar orbe (nominal).
+    Usado para NóduloNorte e NóduloSul.
+    """
+    for i in range(12):
+        cusp_start = houses[i]
+        cusp_end = houses[(i + 1) % 12]
+        if cusp_start <= cusp_end:
+            if cusp_start <= planet_long < cusp_end:
+                return i + 1
+        else:
+            if planet_long >= cusp_start or planet_long < cusp_end:
+                return i + 1
     return 1
 
 def calculate_aspects(positions: List[PlanetPosition]) -> List[Aspect]:
@@ -253,20 +263,26 @@ def calculate_map(birth_data: BirthData) -> MapResult:
         if ret < 0:
             raise HTTPException(status_code=500, detail=f"Erro ao calcular {planet_name}")
         longitude = pos[0]
-        speed_long = pos[3]                  # <--- VELOCIDADE EM LONGITUDE
-        is_retro = (speed_long < 0)          # <--- RETRÓGRADO SE VELOCIDADE NEGATIVA
+        speed_long = pos[3]                 # velocidade em longitude
+        is_retro = (speed_long < 0)         # se < 0, retrógrado
+
+        # Se for NóduloNorte, ou no futuro NóduloSul,
+        # não aplicar orbe => usar find_house_nominal
+        if planet_name == "NóduloNorte":
+            planet_house = find_house_nominal(longitude, houses)
+        else:
+            planet_house = find_house_with_orb(longitude, houses)
 
         sign_idx = int(longitude // 30)
         sign = zodiac_signs[sign_idx]
         deg = longitude % 30
-        planet_house = find_house_with_orb(longitude, houses)
 
         positions.append(PlanetPosition(
             planet=planet_name,
             sign=sign,
             degree=round(deg, 2),
             house=planet_house,
-            retrograde=is_retro            # <--- ATRIBUI O STATUS AQUI
+            retrograde=is_retro
         ))
 
     # NóduloSul = NóduloNorte + 180° (mod 360)
@@ -277,24 +293,23 @@ def calculate_map(birth_data: BirthData) -> MapResult:
         south_sign_idx = int(south_deg // 30)
         south_sign = zodiac_signs[south_sign_idx]
         south_deg_in_sign = south_deg % 30
-        # Determinar casa do nodo sul
-        nodo_sul_house = find_house_with_orb(south_deg, houses)
-        # NóduloSul não tem velocidade, então retrograde=False
+        # Sem orbe para NóduloSul também
+        nodo_sul_house = find_house_nominal(south_deg, houses)
+
         positions.append(PlanetPosition(
             planet="NóduloSul",
             sign=south_sign,
             degree=round(south_deg_in_sign, 2),
             house=nodo_sul_house,
-            retrograde=False
+            retrograde=False  # sem velocidade real
         ))
 
     # Calcular Asc e MC como 'planetas' especiais (retrograde=False)
-    # asc_mc[0] = Asc, asc_mc[1] = MC
     asc_long = asc_mc[0]
     asc_sign_idx = int(asc_long // 30)
     asc_sign = zodiac_signs[asc_sign_idx]
     asc_deg = asc_long % 30
-    asc_house = 1  # Asc nominalmente na casa 1
+    asc_house = 1
     positions.append(PlanetPosition(
         planet="Ascendente",
         sign=asc_sign,
@@ -307,7 +322,7 @@ def calculate_map(birth_data: BirthData) -> MapResult:
     mc_sign_idx = int(mc_long // 30)
     mc_sign = zodiac_signs[mc_sign_idx]
     mc_deg = mc_long % 30
-    mc_house = 10  # MC nominalmente na casa 10
+    mc_house = 10
     positions.append(PlanetPosition(
         planet="MeioCéu",
         sign=mc_sign,
