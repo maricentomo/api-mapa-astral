@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import List, Dict, Optional
+from typing import List, Dict
 import swisseph as swe
 import requests
 from datetime import datetime
@@ -9,8 +9,8 @@ import pytz
 
 app = FastAPI(
     title="API de Mapa Astral",
-    description="API com Quíron, Lilith, Nodos, casas com orbe para planetas e sem orbe para Nodos, aspectos, e retrogradação.",
-    version="10.0",
+    description="API com Quíron, Lilith, Nodos, retrogradação, casas com orbe, aspectos, elementos e quadruplicidades.",
+    version="10.1",
     servers=[
         {"url": "https://api-mapa-astral.onrender.com", "description": "Servidor de Produção"}
     ]
@@ -48,8 +48,9 @@ class MapResult(BaseModel):
     houses: List[HouseInfo]
     aspects: List[Aspect]
     elements: Dict[str, int]
+    quadruplicities: Dict[str, int]  # <-- ADICIONAMOS AQUI
 
-# ========= Configurações de Signos e Elementos =========
+# ========= Configurações de Signos, Elementos e Quadruplicidades =========
 
 zodiac_signs = [
     "Áries", "Touro", "Gêmeos", "Câncer", "Leão", "Virgem",
@@ -63,7 +64,14 @@ element_map = {
     "Câncer": "Água", "Escorpião": "Água", "Peixes": "Água"
 }
 
+quad_map = {
+    "Áries": "Cardinal", "Câncer": "Cardinal", "Libra": "Cardinal", "Capricórnio": "Cardinal",
+    "Touro": "Fixo",     "Leão": "Fixo",      "Escorpião": "Fixo",    "Aquário": "Fixo",
+    "Gêmeos": "Mutável", "Virgem": "Mutável", "Sagitário": "Mutável", "Peixes": "Mutável"
+}
+
 # ========= Corpos Principais (Quíron, Lilith, Nodos etc.) =========
+
 PLANETS_SWEPH = {
     "Sol": swe.SUN,
     "Lua": swe.MOON,
@@ -76,9 +84,9 @@ PLANETS_SWEPH = {
     "Netuno": swe.NEPTUNE,
     "Plutão": swe.PLUTO,
     "Quíron": swe.CHIRON,
-    "Lilith": swe.MEAN_APOG,      # Lilith Média
+    "Lilith": swe.MEAN_APOG,
     "NóduloNorte": swe.TRUE_NODE
-    # NóduloSul será +180° do NóduloNorte manualmente
+    # NóduloSul = +180° do NóduloNorte manualmente
 }
 
 # ========= Geocodificação e Fuso Horário =========
@@ -112,21 +120,19 @@ def convert_to_ut(date_str: str, time_str: str, timezone_str: str):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Erro ao converter horário: {e}")
 
-# ========= Funções para Casas, Orbe de Transição (Planetas) e Aspectos =========
+# ========= Funções para Casas, Orbe de Transição e Aspectos =========
 
 def find_house_with_orb(planet_long: float, houses: List[float]) -> int:
     """
-    Determina em qual casa está o planeta (Sol, Lua, Mercúrio...),
-    considerando:
+    Determina em qual casa está o planeta (Sol, Lua, etc.), aplicando:
       - 6° de orbe para casas comuns
-      - 8° de orbe para casa 1 (Asc) ou casa 10 (MC)
+      - 8° se a próxima casa for 1 ou 10
     """
     for i in range(12):
         cusp_start = houses[i]
         cusp_end = houses[(i + 1) % 12]
 
         if cusp_start <= cusp_end:
-            # casa normal (não cruza 360)
             if cusp_start <= planet_long < cusp_end:
                 nominal_house = i + 1
                 dist_next = cusp_end - planet_long
@@ -136,7 +142,6 @@ def find_house_with_orb(planet_long: float, houses: List[float]) -> int:
                     return next_house_id
                 return nominal_house
         else:
-            # cruza 360
             if planet_long >= cusp_start or planet_long < cusp_end:
                 nominal_house = i + 1
                 if planet_long >= cusp_start:
@@ -151,10 +156,7 @@ def find_house_with_orb(planet_long: float, houses: List[float]) -> int:
     return 1
 
 def find_house_nominal(planet_long: float, houses: List[float]) -> int:
-    """
-    Determina a casa sem aplicar orbe (nominal).
-    Usado para NóduloNorte e NóduloSul.
-    """
+    """Usado para NóduloNorte e NóduloSul (sem orbe)."""
     for i in range(12):
         cusp_start = houses[i]
         cusp_end = houses[(i + 1) % 12]
@@ -168,9 +170,9 @@ def find_house_nominal(planet_long: float, houses: List[float]) -> int:
 
 def calculate_aspects(positions: List[PlanetPosition]) -> List[Aspect]:
     """
-    Identifica aspectos:
-      - Conjunção, Quadratura, Oposição, Trígono → orbe = 8°
-      - Sextil → orbe = 6°
+    Identifica aspectos com orbe diferenciada:
+      - Conjunção, Quadratura, Oposição, Trígono: 8°
+      - Sextil: 6°
     """
     aspect_defs = [
         ("Conjunção", 0, 8),
@@ -208,10 +210,10 @@ def calculate_aspects(positions: List[PlanetPosition]) -> List[Aspect]:
 
 def calculate_elements(positions: List[PlanetPosition]) -> Dict[str, int]:
     """
-    Conta elementos apenas para:
-    - Sol, Lua, Ascendente, MC valem 2 pontos
-    - Demais planetas 'normais' valem 1 ponto
-    - Quíron, Lilith, NóduloNorte, NóduloSul não entram
+    Conta elementos só para planetas 'normais' + Sol/Lua.
+    - Sol, Lua, Asc, MC = 2
+    - Demais planetas = 1
+    - Exclui Quíron, Lilith, Nódulos
     """
     counts = {"Fogo": 0, "Terra": 0, "Ar": 0, "Água": 0}
     dois_pontos = {"Sol", "Lua", "Ascendente", "MeioCéu"}
@@ -222,7 +224,24 @@ def calculate_elements(positions: List[PlanetPosition]) -> Dict[str, int]:
         elem = element_map[p.sign]
         peso = 2 if p.planet in dois_pontos else 1
         counts[elem] += peso
+    return counts
 
+def calculate_quadruplicities(positions: List[PlanetPosition]) -> Dict[str, int]:
+    """
+    Cardinal, Fixo, Mutável, mesma regra de pontuação:
+    - Sol, Lua, Asc, MC = 2
+    - Demais planetas = 1
+    - Exclui Quíron, Lilith, Nódulos
+    """
+    counts = {"Cardinal": 0, "Fixo": 0, "Mutável": 0}
+    dois_pontos = {"Sol", "Lua", "Ascendente", "MeioCéu"}
+
+    for p in positions:
+        if p.planet in ["Quíron", "Lilith", "NóduloNorte", "NóduloSul"]:
+            continue
+        quad_type = quad_map[p.sign]  # 'Cardinal', 'Fixo' ou 'Mutável'
+        peso = 2 if p.planet in dois_pontos else 1
+        counts[quad_type] += peso
     return counts
 
 # ========= Função Principal que Calcula Mapa =========
@@ -241,7 +260,7 @@ def calculate_map(birth_data: BirthData) -> MapResult:
     jd = swe.julday(year, month, day, ut_hour)
     swe.set_ephe_path("./ephemeris")
 
-    # 4) Casas e asc_mc (Placidus)
+    # 4) Casas (Placidus) e asc_mc
     houses, asc_mc = swe.houses(jd, lat, lon, b'P')
 
     # Montar infos de casas
@@ -257,17 +276,17 @@ def calculate_map(birth_data: BirthData) -> MapResult:
         ))
 
     # 5) Calcular posições
-    positions: List[PlanetPosition] = []
+    positions = []
     for planet_name, code in PLANETS_SWEPH.items():
         pos, ret = swe.calc(jd, code)
         if ret < 0:
             raise HTTPException(status_code=500, detail=f"Erro ao calcular {planet_name}")
-        longitude = pos[0]
-        speed_long = pos[3]                 # velocidade em longitude
-        is_retro = (speed_long < 0)         # se < 0, retrógrado
 
-        # Se for NóduloNorte, ou no futuro NóduloSul,
-        # não aplicar orbe => usar find_house_nominal
+        longitude = pos[0]
+        speed_long = pos[3]
+        is_retro = (speed_long < 0)
+
+        # Nódulos sem orbe
         if planet_name == "NóduloNorte":
             planet_house = find_house_nominal(longitude, houses)
         else:
@@ -285,15 +304,14 @@ def calculate_map(birth_data: BirthData) -> MapResult:
             retrograde=is_retro
         ))
 
-    # NóduloSul = NóduloNorte + 180° (mod 360)
+    # NóduloSul = NóduloNorte + 180°
     nodo_norte = next((p for p in positions if p.planet == "NóduloNorte"), None)
     if nodo_norte:
-        nodonorte_deg360 = zodiac_signs.index(nodo_norte.sign)*30 + nodo_norte.degree
-        south_deg = (nodonorte_deg360 + 180) % 360
+        nn_deg = zodiac_signs.index(nodo_norte.sign)*30 + nodo_norte.degree
+        south_deg = (nn_deg + 180) % 360
         south_sign_idx = int(south_deg // 30)
         south_sign = zodiac_signs[south_sign_idx]
         south_deg_in_sign = south_deg % 30
-        # Sem orbe para NóduloSul também
         nodo_sul_house = find_house_nominal(south_deg, houses)
 
         positions.append(PlanetPosition(
@@ -301,47 +319,51 @@ def calculate_map(birth_data: BirthData) -> MapResult:
             sign=south_sign,
             degree=round(south_deg_in_sign, 2),
             house=nodo_sul_house,
-            retrograde=False  # sem velocidade real
+            retrograde=False
         ))
 
-    # Calcular Asc e MC como 'planetas' especiais (retrograde=False)
+    # Ascendente
     asc_long = asc_mc[0]
     asc_sign_idx = int(asc_long // 30)
     asc_sign = zodiac_signs[asc_sign_idx]
     asc_deg = asc_long % 30
-    asc_house = 1
     positions.append(PlanetPosition(
         planet="Ascendente",
         sign=asc_sign,
         degree=round(asc_deg, 2),
-        house=asc_house,
+        house=1,
         retrograde=False
     ))
 
+    # MeioCéu
     mc_long = asc_mc[1]
     mc_sign_idx = int(mc_long // 30)
     mc_sign = zodiac_signs[mc_sign_idx]
     mc_deg = mc_long % 30
-    mc_house = 10
     positions.append(PlanetPosition(
         planet="MeioCéu",
         sign=mc_sign,
         degree=round(mc_deg, 2),
-        house=mc_house,
+        house=10,
         retrograde=False
     ))
 
     # 6) Calcular aspectos
     aspects_list = calculate_aspects(positions)
 
-    # 7) Calcular distribuição de elementos
+    # 7) Elementos
     elements_count = calculate_elements(positions)
 
+    # 8) Quadruplicidades
+    quads_count = calculate_quadruplicities(positions)
+
+    # Retorno final
     return MapResult(
         positions=positions,
         houses=house_list,
         aspects=aspects_list,
-        elements=elements_count
+        elements=elements_count,
+        quadruplicities=quads_count  # AQUI INCLUÍMOS QUADRUPLICITIES
     )
 
 # ========= Endpoints =========
