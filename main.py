@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List, Dict
-import pyswisseph as swe
+import swisseph as swe
 import requests
 from datetime import datetime
 from timezonefinder import TimezoneFinder
