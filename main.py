@@ -1,11 +1,12 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List, Dict
-import swisseph as swe
+import pyswisseph as swe
 import requests
 from datetime import datetime
 from timezonefinder import TimezoneFinder
 import pytz
+
 
 app = FastAPI(
     title="API de Mapa Astral",
