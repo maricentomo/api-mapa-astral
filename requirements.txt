@@ -1,8 +1,7 @@
 fastapi
 uvicorn
-pyswisseph
+swisseph
 requests
 timezonefinder==6.5.7
 pytz
-
 
