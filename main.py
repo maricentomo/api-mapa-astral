@@ -140,7 +140,10 @@ def convert_to_ut(date_str: str, time_str: str, timezone_str: str):
 
 @app.post("/calculate", response_model=MapResult)
 async def calculate_map_endpoint(birth_data: BirthData):
-    return calculate_map(birth_data)
+    try:
+        return calculate_map(birth_data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/")
 async def read_root():
