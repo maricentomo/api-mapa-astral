@@ -12,7 +12,7 @@ app = FastAPI(
     description="API com Quíron, Lilith, Nodos, retrogradação, casas com orbe, aspectos, elementos e quadruplicidades.",
     version="10.1",
     servers=[
-        {"url": "https://api-mapa-astral.onrender.com", "description": "Servidor de Produção"}
+        {"url": "https://api-mapa-astral-production.up.railway.app", "description": "Servidor de Produção"}
     ]
 )
 
