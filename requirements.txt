@@ -1,3 +1,8 @@
+fastapi
+uvicorn
+pyswisseph
+requests
+timezonefinder
+pytz
 streamlit
 google-generativeai
-requests
