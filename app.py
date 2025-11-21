@@ -129,11 +129,10 @@ def update_aprendizado():
 with st.sidebar:
     # Logo
     try:
-        st.image("logo_olho.jpg", use_container_width=True)
+        st.image("logo_olho.png", use_container_width=True)
     except:
-        st.warning("Logo não encontrado (logo_olho.jpg)")
-        
-    st.markdown("<h2 style='text-align: center; color: #9a64ce !important;'>Portal Urano</h2>", unsafe_allow_html=True)
+        st.warning("Logo não encontrado (logo_olho.png)")
+    
     st.write("") # Espaçamento
 
     # --- GRUPO 1: ASTROLOGIA ---

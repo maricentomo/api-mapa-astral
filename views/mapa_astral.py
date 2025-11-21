@@ -228,7 +228,7 @@ def render():
 
         # Exibir histórico de mensagens
         for message in st.session_state.messages:
-            avatar = "logo_olho.jpg" if message["role"] == "assistant" else None
+            avatar = "logo_olho.png" if message["role"] == "assistant" else None
             with st.chat_message(message["role"], avatar=avatar):
                 st.markdown(message["content"])
 
@@ -267,7 +267,7 @@ def render():
                 mensagens.append({"role": msg["role"], "content": msg["content"]})
 
             # Chamar o modelo
-            with st.chat_message("assistant", avatar="logo_olho.jpg"):
+            with st.chat_message("assistant", avatar="logo_olho.png"):
                 message_placeholder = st.empty()
 
                 try:
