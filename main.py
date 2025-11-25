@@ -412,7 +412,7 @@ async def chat_endpoint(request: ChatRequest):
     
     try:
         # Criar o modelo
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        model = genai.GenerativeModel('gemini-1.5-flash')
         
         # Preparar histórico de conversa
         chat_history = []
