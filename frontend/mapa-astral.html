@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mapa Astral - Portal Urano</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <div class="logo-container">
+                <a href="index.html">
+                    <img src="../logo_novo.png" alt="Portal Urano" class="logo">
+                </a>
+            </div>
+        </div>
+
+        <div class="sidebar-divider"></div>
+
+        <nav class="sidebar-nav">
+            <!-- ASTROLOGIA -->
+            <div class="sidebar-category-title">ASTROLOGIA</div>
+            <a href="mapa-astral.html" class="sidebar-button active">☉ Mapa Astral</a>
+            <a href="revolucao-solar.html" class="sidebar-button">⊙ Revolução Solar</a>
+            <a href="sinastria.html" class="sidebar-button">♡ Sinastria</a>
+            <a href="vocacional.html" class="sidebar-button">⚙ Vocacional</a>
+            <a href="infantil.html" class="sidebar-button">○ Infantil</a>
+            <a href="transitos.html" class="sidebar-button">⊕ Trânsitos</a>
+
+            <!-- MATRIZ DO DESTINO -->
+            <div class="sidebar-category-title">MATRIZ DO DESTINO</div>
+            <a href="matriz-pessoal.html" class="sidebar-button">◎ Matriz Pessoal</a>
+            <a href="matriz-compatibilidade.html" class="sidebar-button">⬡ Matriz Compatibilidade</a>
+            <a href="matriz-infantil.html" class="sidebar-button">○ Matriz Infantil</a>
+
+            <!-- TUTORIAIS -->
+            <div class="sidebar-category-title">TUTORIAIS</div>
+            <a href="videos.html" class="sidebar-button">▷ Vídeos</a>
+            <a href="pdfs.html" class="sidebar-button">□ PDFs</a>
+
+            <!-- ARTES -->
+            <div class="sidebar-category-title">ARTES</div>
+            <a href="galeria.html" class="sidebar-button">▢ Galeria</a>
+        </nav>
+
+        <!-- Footer User Info -->
+        <div class="sidebar-footer">
+            <div class="user-info">
+                <div class="user-avatar">US</div>
+                <div class="user-details">
+                    <div class="user-name">Membro Iniciado</div>
+                    <div class="user-plan">Plano Astral Premium</div>
+                </div>
+            </div>
+            <button class="logout-button">Sair</button>
+        </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+        <div class="chat-page">
+            <!-- Área Central de Chat -->
+            <div class="chat-center">
+                <!-- Mensagens -->
+                <div class="chat-history" id="chat-history">
+                    <!-- Mensagem de boas-vindas -->
+                    <div class="welcome-message">
+                        <h1>☉ Mapa Astral</h1>
+                        <p>Converse comigo sobre interpretação de mapas astrais, posições planetárias e influências
+                            cósmicas.</p>
+                    </div>
+                </div>
+
+                <!-- Input fixo embaixo -->
+                <div class="chat-input-wrapper">
+                    <div class="chat-input-container">
+                        <input type="text" id="chat-input" class="chat-input"
+                            placeholder="Faça sua pergunta sobre Mapa Astral..." />
+                        <button id="chat-send" class="chat-send-btn">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="script-chat.js"></script>
+</body>
+
+</html>

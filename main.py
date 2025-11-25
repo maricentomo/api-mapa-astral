@@ -1,20 +1,50 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Dict
+from typing import List, Dict, Optional
+from sqlalchemy.orm import Session
 import swisseph as swe
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 from timezonefinder import TimezoneFinder
 import pytz
+import json
+import os
+
+# Importar Google Gemini para IA
+import google.generativeai as genai
+
+# Importar database, models e auth
+from database import get_db, engine, Base
+import models
+import auth
+
+# Configurar API key do Gemini
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
+if GOOGLE_API_KEY:
+    genai.configure(api_key=GOOGLE_API_KEY)
 
 app = FastAPI(
     title="API de Mapa Astral",
-    description="API com Quíron, Lilith, Nodos, retrogradação, casas com orbe, aspectos, elementos e quadruplicidades.",
-    version="10.1",
+    description="API com Quíron, Lilith, Nodos, retrogradação, casas com orbe, aspectos, elementos, quadruplicidades e Chat IA.",
+    version="11.0",
     servers=[
-        {"url": "https://api-mapa-astral-production.up.railway.app", "description": "Servidor de Produção"}
+        {"url": "https://api-mapa-astral-production.up.railway.app", "description": "Servidor de Produção"},
+        {"url": "http://localhost:8000", "description": "Servidor Local"}
     ]
 )
+
+# Configurar CORS para permitir requisições do frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Em produção, especifique os domínios permitidos
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Criar tabelas do banco de dados ao iniciar
+Base.metadata.create_all(bind=engine)
 
 # ========= Modelos de Dados =========
 
@@ -323,15 +353,523 @@ def calculate_map(birth_data: BirthData) -> MapResult:
         quadruplicities=quads_count
     )
 
+# ========= Modelos Adicionais para Chat/IA =========
+
+class ChatMessage(BaseModel):
+    role: str  # "user" ou "assistant"
+    content: str
+
+class ChatRequest(BaseModel):
+    message: str
+    birth_data: Optional[BirthData] = None
+    map_data: Optional[Dict] = None
+    history: Optional[List[ChatMessage]] = []
+
+class ChatResponse(BaseModel):
+    response: str
+    
+# ========= Instruções do Sistema para IA =========
+
+INSTRUCOES_SISTEMA = """
+IDENTIDADE E OBJETIVO
+Você é o Astro IA, um GPT especializado em análise astrológica profunda e técnica. Seu objetivo é interpretar mapas natais com precisão psicológica, revelando padrões energéticos, potenciais e desafios evolutivos. Sua abordagem é direta, profunda e analítica, evitando sentimentalismos excessivos ou linguagem piegas.
+
+TOM E ESTILO DAS RESPOSTAS
+- Linguagem técnica porém acessível: Use terminologia astrológica adequada com explicações claras
+- Profundidade psicológica: Analise motivações inconscientes, padrões comportamentais e dinâmicas internas
+- Objetividade analítica: Seja direto ao ponto, evitando rodeios ou dramatizações
+- Luz e Sombra: Para cada posicionamento, SEMPRE apresente tanto os potenciais (luz) quanto os desafios/bloqueios (sombra)
+- Respostas longas e detalhadas, ricas em informações práticas
+- Contextualize cada elemento dentro da totalidade do mapa
+
+ESTRUTURA DA ANÁLISE
+Use títulos destacados em cada seção e mantenha um tom didático e técnico, evitando informalidades excessivas.
+Para cada posicionamento planetário, sempre inclua:
+✓ Contexto dentro do mapa como um todo
+✓ Aspectos relevantes (conjunções, quadraturas, trígonos, sextis, oposições)
+✓ LUZ: Potenciais, dons, facilidades
+✓ SOMBRA: Desafios, bloqueios, tendências disfuncionais
+✓ Orientações práticas para integração
+"""
+
 # ========= Endpoints =========
 
 @app.post("/calculate", response_model=MapResult)
 async def calculate_map_endpoint(birth_data: BirthData):
+    """
+    Calcula o mapa astral completo baseado nos dados de nascimento.
+    """
     return calculate_map(birth_data)
+
+@app.post("/chat", response_model=ChatResponse)
+async def chat_endpoint(request: ChatRequest):
+    """
+    Endpoint de chat com IA para análise astrológica.
+    Aceita mensagem do usuário, dados do mapa (se disponível) e histórico de conversa.
+    """
+    if not GOOGLE_API_KEY:
+        raise HTTPException(status_code=503, detail="Serviço de IA não configurado. Configure GOOGLE_API_KEY.")
+    
+    try:
+        # Criar o modelo
+        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        
+        # Preparar histórico de conversa
+        chat_history = []
+        
+        # Adicionar instruções do sistema
+        chat_history.append({"role": "user", "parts": [INSTRUCOES_SISTEMA]})
+        chat_history.append({"role": "model", "parts": ["Entendido. Sou o Astro IA e seguirei todas as diretrizes fornecidas para análises astrológicas profundas e técnicas."]})
+        
+        # Se houver dados do mapa, adicionar ao contexto
+        if request.map_data:
+            contexto_mapa = f"""
+            DADOS TÉCNICOS DO MAPA NATAL:
+            {json.dumps(request.map_data, ensure_ascii=False, indent=2)}
+            
+            Use estes dados para fornecer análises precisas e contextualizadas.
+            """
+            chat_history.append({"role": "user", "parts": [contexto_mapa]})
+            chat_history.append({"role": "model", "parts": ["Dados do mapa recebidos. Pronto para análise."]})
+        
+        # Adicionar histórico de mensagens anteriores
+        for msg in request.history:
+            role = "model" if msg.role == "assistant" else "user"  
+            chat_history.append({"role": role, "parts": [msg.content]})
+        
+        # Iniciar chat e enviar mensagem
+        chat = model.start_chat(history=chat_history)
+        response = chat.send_message(request.message)
+        
+        return ChatResponse(response=response.text)
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao processar resposta da IA: {str(e)}")
 
 @app.get("/")
 async def read_root():
-    return {"message": "API de Mapa Astral ativa! Acesse /docs para testar."}
+    """
+    Endpoint raiz com informações sobre a API.
+    """
+    return {
+        "message": "API de Mapa Astral ativa!",
+        "version": "11.0",
+        "endpoints": {
+            "/docs": "Documentação interativa da API",
+            "/calculate": "POST - Calcular mapa astral",
+            "/chat": "POST - Chat com IA astrológica"
+        }
+    }
+    
+@app.get("/health")
+async def health_check():
+    """
+    Endpoint de health check para monitoramento.
+    """
+    return {
+        "status": "healthy",
+        "gemini_configured": GOOGLE_API_KEY is not None,
+        "database": "connected"
+    }
+
+# ==================== NOVOS ENDPOINTS ====================
+
+# ========= Modelos Pydantic para Request/Response =========
+
+class UserRegister(BaseModel):
+    email: str
+    username: str
+    password: str
+    full_name: Optional[str] = None
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+class UserResponse(BaseModel):
+    id: int
+    email: str
+    username: str
+    full_name: Optional[str]
+    is_premium: bool
+    
+    class Config:
+        from_attributes = True
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str
+    user: UserResponse
+
+class BirthChartCreate(BaseModel):
+    name: Optional[str] = None
+    birth_date: str
+    birth_time: str
+    birth_city: str
+    birth_country: str
+
+class BirthChartResponse(BaseModel):
+    id: int
+    user_id: int
+    name: Optional[str]
+    birth_date: str
+    birth_time: str
+    birth_city: str
+    birth_country: str
+    chart_data: Optional[Dict]
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+class ConversationCreate(BaseModel):
+    birth_chart_id: Optional[int] = None
+    title: Optional[str] = None
+
+class MessageCreate(BaseModel):
+    message: str
+
+class MessageResponse(BaseModel):
+    id: int
+    role: str
+    content: str
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+class ConversationResponse(BaseModel):
+    id: int
+    title: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+    messages: List[MessageResponse] = []
+    
+    class Config:
+        from_attributes = True
+
+# ========= Endpoints de Autenticação =========
+
+@app.post("/auth/register", response_model=UserResponse)
+async def register(user_data: UserRegister, db: Session = Depends(get_db)):
+    """
+    Registrar novo usuário
+    """
+    # Verificar se email já existe
+    existing_user = db.query(models.User).filter(models.User.email == user_data.email).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email já cadastrado")
+    
+    # Verificar se username já existe
+    existing_username = db.query(models.User).filter(models.User.username == user_data.username).first()
+    if existing_username:
+        raise HTTPException(status_code=400, detail="Username já cadastrado")
+    
+    # Criar novo usuário
+    hashed_password = auth.get_password_hash(user_data.password)
+    new_user = models.User(
+        email=user_data.email,
+        username=user_data.username,
+        hashed_password=hashed_password,
+        full_name=user_data.full_name
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    
+    return new_user
+
+@app.post("/auth/login", response_model=TokenResponse)
+async def login(credentials: UserLogin, db: Session = Depends(get_db)):
+    """
+    Login e geração de token JWT
+    """
+    user = auth.authenticate_user(db, credentials.email, credentials.password)
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Email ou senha incorretos"
+        )
+    
+    # Criar token
+    access_token = auth.create_access_token(data={"sub": user.id})
+    
+    return TokenResponse(
+        access_token=access_token,
+        token_type="bearer",
+        user=UserResponse.model_validate(user)
+    )
+
+@app.get("/auth/me", response_model=UserResponse)
+async def get_current_user_info(current_user: models.User = Depends(auth.get_current_user)):
+    """
+    Obter informações do usuário atual
+    """
+    return current_user
+
+# ========= Endpoints de Birth Charts =========
+
+@app.post("/charts", response_model=BirthChartResponse)
+async def create_birth_chart(
+    chart_data: BirthChartCreate,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Criar novo mapa astral e calcular dados
+    """
+    # Calcular mapa usando a função existente
+    birth_data = BirthData(
+        date=chart_data.birth_date,
+        time=chart_data.birth_time,
+        city=chart_data.birth_city,
+        country=chart_data.birth_country
+    )
+    
+    try:
+        calculated_map = calculate_map(birth_data)
+        chart_data_json = calculated_map.dict()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Erro ao calcular mapa: {str(e)}")
+    
+    # Salvar no banco
+    new_chart = models.BirthChart(
+        user_id=current_user.id,
+        name=chart_data.name,
+        birth_date=chart_data.birth_date,
+        birth_time=chart_data.birth_time,
+        birth_city=chart_data.birth_city,
+        birth_country=chart_data.birth_country,
+        chart_data=chart_data_json
+    )
+    db.add(new_chart)
+    db.commit()
+    db.refresh(new_chart)
+    
+    return new_chart
+
+@app.get("/charts", response_model=List[BirthChartResponse])
+async def list_birth_charts(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Listar todos os mapas do usuário
+    """
+    charts = db.query(models.BirthChart).filter(
+        models.BirthChart.user_id == current_user.id
+    ).all()
+    return charts
+
+@app.get("/charts/{chart_id}", response_model=BirthChartResponse)
+async def get_birth_chart(
+    chart_id: int,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Obter um mapa específico
+    """
+    chart = db.query(models.BirthChart).filter(
+        models.BirthChart.id == chart_id,
+        models.BirthChart.user_id == current_user.id
+    ).first()
+    
+    if not chart:
+        raise HTTPException(status_code=404, detail="Mapa não encontrado")
+    
+    return chart
+
+@app.delete("/charts/{chart_id}")
+async def delete_birth_chart(
+    chart_id: int,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Deletar um mapa
+    """
+    chart = db.query(models.BirthChart).filter(
+        models.BirthChart.id == chart_id,
+        models.BirthChart.user_id == current_user.id
+    ).first()
+    
+    if not chart:
+        raise HTTPException(status_code=404, detail="Mapa não encontrado")
+    
+    db.delete(chart)
+    db.commit()
+    
+    return {"message": "Mapa deletado com sucesso"}
+
+# ========= Endpoints de Conversas =========
+
+@app.post("/conversations", response_model=ConversationResponse)
+async def create_conversation(
+    conv_data: ConversationCreate,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Criar nova conversa
+    """
+    new_conversation = models.Conversation(
+        user_id=current_user.id,
+        birth_chart_id=conv_data.birth_chart_id,
+        title=conv_data.title or "Nova Conversa"
+    )
+    db.add(new_conversation)
+    db.commit()
+    db.refresh(new_conversation)
+    
+    return new_conversation
+
+@app.get("/conversations", response_model=List[ConversationResponse])
+async def list_conversations(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Listar todas as conversas do usuário
+    """
+    conversations = db.query(models.Conversation).filter(
+        models.Conversation.user_id == current_user.id
+    ).order_by(models.Conversation.updated_at.desc()).all()
+    
+    return conversations
+
+@app.get("/conversations/{conversation_id}", response_model=ConversationResponse)
+async def get_conversation(
+    conversation_id: int,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Obter conversa específica com todo o histórico de mensagens
+    """
+    conversation = db.query(models.Conversation).filter(
+        models.Conversation.id == conversation_id,
+        models.Conversation.user_id == current_user.id
+    ).first()
+    
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversa não encontrada")
+    
+    return conversation
+
+@app.post("/conversations/{conversation_id}/messages", response_model=MessageResponse)
+async def send_message(
+    conversation_id: int,
+    message_data: MessageCreate,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Enviar mensagem em uma conversa e receber resposta da IA
+    """
+    # Verificar se a conversa existe e pertence ao usuário
+    conversation = db.query(models.Conversation).filter(
+        models.Conversation.id == conversation_id,
+        models.Conversation.user_id == current_user.id
+    ).first()
+    
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversa não encontrada")
+    
+    # Salvar mensagem do usuário
+    user_message = models.Message(
+        conversation_id=conversation_id,
+        role="user",
+        content=message_data.message
+    )
+    db.add(user_message)
+    db.commit()
+    
+    # Buscar histórico de mensagens da conversa
+    messages = db.query(models.Message).filter(
+        models.Message.conversation_id == conversation_id
+    ).order_by(models.Message.created_at).all()
+    
+    # Buscar dados do mapa se houver
+    map_data = None
+    if conversation.birth_chart_id:
+        chart = db.query(models.BirthChart).filter(
+            models.BirthChart.id == conversation.birth_chart_id
+        ).first()
+        if chart:
+            map_data = chart.chart_data
+    
+    # Chamar IA (usando o endpoint /chat interno)
+    try:
+        history = [ChatMessage(role=msg.role, content=msg.content) for msg in messages[:-1]]  # Exclude last message
+        
+        chat_request = ChatRequest(
+            message=message_data.message,
+            map_data=map_data,
+            history=history
+        )
+        
+        # Chamar função de chat diretamente
+        if not GOOGLE_API_KEY:
+            raise HTTPException(status_code=503, detail="IA não configurada")
+        
+        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        chat_history = []
+        chat_history.append({"role": "user", "parts": [INSTRUCOES_SISTEMA]})
+        chat_history.append({"role": "model", "parts": ["Entendido."]})
+        
+        if map_data:
+            contexto_mapa = f"DADOS DO MAPA:\\n{json.dumps(map_data, ensure_ascii=False, indent=2)}"
+            chat_history.append({"role": "user", "parts": [contexto_mapa]})
+            chat_history.append({"role": "model", "parts": ["Dados recebidos."]})
+        
+        for msg in history:
+            role = "model" if msg.role == "assistant" else "user"
+            chat_history.append({"role": role, "parts": [msg.content]})
+        
+        chat = model.start_chat(history=chat_history)
+        response = chat.send_message(message_data.message)
+        
+        # Salvar resposta da IA
+        assistant_message = models.Message(
+            conversation_id=conversation_id,
+            role="assistant",
+            content=response.text
+        )
+        db.add(assistant_message)
+        
+        # Atualizar timestamp da conversa
+        conversation.updated_at = datetime.utcnow()
+        
+        db.commit()
+        db.refresh(assistant_message)
+        
+        return assistant_message
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao processar resposta da IA: {str(e)}")
+
+@app.delete("/conversations/{conversation_id}")
+async def delete_conversation(
+    conversation_id: int,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Deletar conversa
+    """
+    conversation = db.query(models.Conversation).filter(
+        models.Conversation.id == conversation_id,
+        models.Conversation.user_id == current_user.id
+    ).first()
+    
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversa não encontrada")
+    
+    db.delete(conversation)
+    db.commit()
+    
+    return {"message": "Conversa deletada com sucesso"}
 
 if __name__ == "__main__":
     import uvicorn

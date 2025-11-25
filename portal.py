@@ -17,7 +17,7 @@ from views import (
 # ==================================================
 # CONFIGURAÇÃO INICIAL
 # ==================================================
-st.set_page_config(page_title="Portal Astro IA", page_icon="🔮", layout="wide")
+st.set_page_config(page_title="Portal Astro IA", page_icon="logo_olho_final.jpg", layout="wide")
 
 # ==================================================
 # AUTENTICAÇÃO
@@ -29,7 +29,7 @@ if not auth.login_page():
 # BARRA LATERAL (NAVEGAÇÃO)
 # ==================================================
 with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/2647/2647282.png", width=100)
+    st.image("logo_olho_final.jpg", width=100)
     st.title("Portal Astro IA")
     st.write(f"Bem-vindo(a)!")
     

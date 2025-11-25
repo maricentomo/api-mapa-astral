@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal Urano - Astrologia</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <div class="logo-container">
+                <a href="index.html">
+                    <img src="../logo_novo.png" alt="Portal Urano" class="logo">
+                </a>
+            </div>
+        </div>
+
+        <div class="sidebar-divider"></div>
+
+        <nav class="sidebar-nav">
+            <!-- ASTROLOGIA -->
+            <div class="sidebar-category-title">ASTROLOGIA</div>
+            <a href="mapa-astral.html" class="sidebar-button">☉ Mapa Astral</a>
+            <a href="revolucao-solar.html" class="sidebar-button">⊙ Revolução Solar</a>
+            <a href="sinastria.html" class="sidebar-button">♡ Sinastria</a>
+            <a href="vocacional.html" class="sidebar-button">⚙ Vocacional</a>
+            <a href="infantil.html" class="sidebar-button">○ Infantil</a>
+            <a href="transitos.html" class="sidebar-button">⊕ Trânsitos</a>
+
+            <!-- MATRIZ DO DESTINO -->
+            <div class="sidebar-category-title">MATRIZ DO DESTINO</div>
+            <a href="matriz-pessoal.html" class="sidebar-button">◎ Matriz Pessoal</a>
+            <a href="matriz-compatibilidade.html" class="sidebar-button">⬡ Matriz Compatibilidade</a>
+            <a href="matriz-infantil.html" class="sidebar-button">○ Matriz Infantil</a>
+
+            <!-- TUTORIAIS -->
+            <div class="sidebar-category-title">TUTORIAIS</div>
+            <a href="videos.html" class="sidebar-button">▷ Vídeos</a>
+            <a href="pdfs.html" class="sidebar-button">□ PDFs</a>
+
+            <!-- ARTES -->
+            <div class="sidebar-category-title">ARTES</div>
+            <a href="galeria.html" class="sidebar-button">▢ Galeria</a>
+        </nav>
+
+        <!-- Footer User Info -->
+        <div class="sidebar-footer">
+            <div class="user-info">
+                <div class="user-avatar">US</div>
+                <div class="user-details">
+                    <div class="user-name">Membro Iniciado</div>
+                    <div class="user-plan">Plano Astral Premium</div>
+                </div>
+            </div>
+            <button class="logout-button">Sair</button>
+        </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+        <!-- Home Page -->
+        <div id="home-page" class="page active">
+            <!-- Texture Banner -->
+            <div class="texture-banner">
+                <img src="../textura.png" alt="Textura Mística">
+            </div>
+
+            <!-- Content Area -->
+            <div class="home-content">
+                <div class="home-text">
+                    <h1 class="home-title">Olá, que bom te ver<br>
+                        por aqui...</h1>
+                    <p class="home-subtitle">
+                        Explore os mistérios do cosmos, desvende seu mapa astral <br> e descubra conexões ocultas no
+                        universo.
+                    </p>
+
+                    <!-- Chat de Ajuda -->
+                    <div class="chat-container">
+                        <div class="chat-messages" id="chatMessages">
+                            <div class="chat-message assistant">
+                                <div class="message-bubble">
+                                    Olá! Como posso te ajudar com sua jornada astrológica? 🌟
+                                </div>
+                            </div>
+                        </div>
+                        <div class="chat-input-container">
+                            <input type="text" class="chat-input" placeholder="Digite sua pergunta..." id="chatInput">
+                            <button class="chat-send-btn" id="chatSendBtn">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="home-image">
+                    <img src="../elfa_2.png" alt="Assistente Mística" class="elf-image">
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="page-footer">
+                A IA pode cometer erros. Verifique informações importantes.
+            </div>
+        </div>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+
+</html>

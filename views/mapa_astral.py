@@ -3,8 +3,18 @@ import requests
 import json
 import google.generativeai as genai
 
-# Configurar API key diretamente no código (sem pedir ao usuário)
-API_KEY = "AIzaSyDWfRN-mlO134UK0d_tuemuEyVVoIoDvAE"  # Sua chave API
+# Configurar API key de forma segura
+import os
+try:
+    # Tenta pegar dos secrets do Streamlit (local)
+    API_KEY = st.secrets["GOOGLE_API_KEY"]
+except Exception as e:
+    # Se falhar, tenta pegar das variáveis de ambiente (Railway/Deploy)
+    API_KEY = os.environ.get("GOOGLE_API_KEY")
+    if not API_KEY:
+        st.error(f"⚠️ Chave de API não configurada. Erro ao ler secrets: {e}")
+        st.stop()
+
 genai.configure(api_key=API_KEY)
 
 # --- IMPORTANTE: SUAS INSTRUÇÕES (A PERSONALIDADE DO ROBÔ) ---
@@ -120,8 +130,23 @@ IMPORTANTE: Use títulos destacados em cada seção e mantenha um tom didático 
 """
 
 def render():
-    st.title("🔮 Mapa Astral")
-    st.markdown("### *Sua jornada de autoconhecimento começa aqui.*")
+    # --- HEADER CUSTOMIZADO ---
+    st.markdown("""
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; background-color: #110f1e; border-bottom: 1px solid #333; margin-bottom: 20px; border-radius: 10px;">
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <div style="background-color: #9a64ce; padding: 8px; border-radius: 8px;">
+                <span style="font-size: 20px;">🗺️</span>
+            </div>
+            <div>
+                <div style="color: white; font-weight: bold; font-size: 16px;">Mapa Astral</div>
+                <div style="color: #888; font-size: 12px;">Análise profunda da sua personalidade cósmica</div>
+            </div>
+        </div>
+        <div>
+            <button style="background: none; border: none; color: #666; cursor: pointer; font-size: 18px;">🗑️</button>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     # Inicialização de estados da sessão
     if "messages" not in st.session_state:
@@ -135,6 +160,7 @@ def render():
 
     # Se ainda não tiver calculado o mapa, mostrar formulário
     if st.session_state.etapa == "inicial":
+        st.markdown("<h2 style='text-align: center; color: #9a64ce;'>Inicie sua Jornada Cósmica</h2>", unsafe_allow_html=True)
         with st.form("meu_formulario"):
             col1, col2, col3 = st.columns(3)
             with col1:
@@ -146,7 +172,7 @@ def render():
             with col3:
                 hora_nasc = st.text_input("Hora (HH:MM)", placeholder="Ex: 05:45")
 
-            submit = st.form_submit_button("✨ Iniciar Consulta")
+            submit = st.form_submit_button("✨ Iniciar Consulta", use_container_width=True)
 
         # LÓGICA: CLICOU NO BOTÃO
         if submit:
@@ -219,30 +245,57 @@ def render():
 
     # Se já tiver calculado o mapa, mostrar chat
     else:
-        # Botão para reiniciar
-        if st.button("🔄 Gerar Novo Mapa"):
-            st.session_state.messages = []
-            st.session_state.dados_mapa = None
-            st.session_state.etapa = "inicial"
-            st.rerun()
+        # --- EMPTY STATE (Se não houver mensagens ou apenas a inicial) ---
+        # Na verdade, sempre teremos a mensagem inicial se o mapa foi calculado.
+        # Mas vamos simular o layout da imagem para quando o usuário ainda não interagiu muito ou quer sugestões.
+        
+        # Se só tiver a mensagem inicial do sistema, mostramos o "Empty State" visual acima do chat
+        if len(st.session_state.messages) <= 1:
+            st.markdown("""
+            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; margin-top: 50px; margin-bottom: 50px;">
+                <div style="background-color: #1a1a1a; padding: 20px; border-radius: 20px; margin-bottom: 20px; border: 1px solid #333;">
+                    <span style="font-size: 40px;">🤖</span>
+                </div>
+                <h1 style="color: #e0e0e0; font-family: 'Cinzel', serif; margin-bottom: 10px;">MAPA ASTRAL</h1>
+                <p style="color: #888; text-align: center; max-width: 500px; margin-bottom: 30px;">
+                    Os números revelam o código oculto do seu destino. Vamos decifrar sua matriz juntos.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Suggestion Chips
+            col_s1, col_s2, col_s3 = st.columns(3)
+            with col_s1:
+                if st.button("O que diz meu momento atual?", use_container_width=True):
+                    st.session_state.suggestion_input = "O que diz meu momento atual?"
+            with col_s2:
+                if st.button("Qual meu propósito?", use_container_width=True):
+                    st.session_state.suggestion_input = "Qual meu propósito?"
+            with col_s3:
+                if st.button("Compatibilidade amorosa", use_container_width=True):
+                    st.session_state.suggestion_input = "Fale sobre minha compatibilidade amorosa"
 
         # Exibir histórico de mensagens
         for message in st.session_state.messages:
-            avatar = "logo_olho.png" if message["role"] == "assistant" else None
+            avatar = "logo_olho_final.jpg" if message["role"] == "assistant" else None
             with st.chat_message(message["role"], avatar=avatar):
                 st.markdown(message["content"])
 
-        # Campo de entrada para o usuário
-        user_input = st.chat_input("Digite sua mensagem aqui...")
+        # Lógica para input (Sugestão ou Digitação)
+        if "suggestion_input" in st.session_state:
+            user_input = st.session_state.suggestion_input
+            del st.session_state.suggestion_input
+        else:
+            user_input = st.chat_input("Envie sua pergunta ao universo...")
 
         # Se o usuário enviar uma mensagem
         if user_input:
             # Adicionar mensagem do usuário ao histórico
             st.session_state.messages.append({"role": "user", "content": user_input})
 
-            # Exibir mensagem do usuário
-            with st.chat_message("user"):
-                st.markdown(user_input)
+            # Exibir mensagem do usuário (se não for rerun imediato)
+            # with st.chat_message("user"):
+            #    st.markdown(user_input)
 
             # Preparar o contexto para o modelo
 
@@ -267,7 +320,8 @@ def render():
                 mensagens.append({"role": msg["role"], "content": msg["content"]})
 
             # Chamar o modelo
-            with st.chat_message("assistant", avatar="logo_olho.png"):
+            # Usar st.spinner ou placeholder para streaming
+            with st.chat_message("assistant", avatar="logo_olho_final.jpg"):
                 message_placeholder = st.empty()
 
                 try:
@@ -295,6 +349,10 @@ def render():
 
                     # Adicionar resposta ao histórico
                     st.session_state.messages.append({"role": "assistant", "content": full_response})
+                    
+                    # Rerun para atualizar a interface e remover o estado de sugestão se houver
+                    st.rerun()
 
                 except Exception as e:
                     st.error(f"Erro ao gerar resposta: {e}")
+

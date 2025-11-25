@@ -8,9 +8,17 @@ import google.generativeai as genai
 # ==================================================
 st.set_page_config(page_title="Astro IA", page_icon="🔮", layout="wide")
 
-# Configurar API key diretamente no código (sem pedir ao usuário)
-API_KEY = "AIzaSyDWfRN-mlO134UK0d_tuemuEyVVoIoDvAE"  # Sua chave API
-genai.configure(api_key=API_KEY)
+# Configurar API key de forma segura
+import os
+try:
+    API_KEY = st.secrets["GOOGLE_API_KEY"]
+except:
+    API_KEY = os.environ.get("GOOGLE_API_KEY")
+
+if API_KEY:
+    genai.configure(api_key=API_KEY)
+else:
+    st.warning("API Key não encontrada no backup.")
 
 # --- IMPORTANTE: SUAS INSTRUÇÕES (A PERSONALIDADE DO ROBÔ) ---
 INSTRUCOES_SISTEMA = """
