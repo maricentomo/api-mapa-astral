@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from pydantic import BaseModel
 from typing import List, Dict, Optional
 from sqlalchemy.orm import Session
@@ -19,8 +20,11 @@ from database import get_db, engine, Base
 import models
 import auth
 
+# Importar módulo de geração de SVG
+from views.chart_svg import generate_chart_svg_from_birth_data, CustomChartColors
+
 # Configurar API key do Gemini
-GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY") or "AIzaSyCYLid7hqKnsD_dPsz1gANvR_2vZA2gh_o"
 if GOOGLE_API_KEY:
     genai.configure(api_key=GOOGLE_API_KEY)
 
@@ -73,12 +77,21 @@ class Aspect(BaseModel):
     angle: float
     orb: float
 
+
 class MapResult(BaseModel):
     positions: List[PlanetPosition]
     houses: List[HouseInfo]
     aspects: List[Aspect]
     elements: Dict[str, int]
     quadruplicities: Dict[str, int]  # <-- ADICIONAMOS AQUI
+
+class ReportRequest(BaseModel):
+    name: str
+    date: str      # Formato DD/MM/AAAA ou YYYY-MM-DD
+    time: str      # Formato HH:MM
+    city: str
+    country: str
+    question: Optional[str] = None  # Pergunta opcional do usuário
 
 # ========= Configurações de Signos, Elementos e Quadruplicidades =========
 
@@ -412,7 +425,7 @@ async def chat_endpoint(request: ChatRequest):
     
     try:
         # Criar o modelo
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.5-flash')
         
         # Preparar histórico de conversa
         chat_history = []
@@ -453,11 +466,12 @@ async def read_root():
     """
     return {
         "message": "API de Mapa Astral ativa!",
-        "version": "11.0",
+        "version": "12.0",
         "endpoints": {
             "/docs": "Documentação interativa da API",
             "/calculate": "POST - Calcular mapa astral",
-            "/chat": "POST - Chat com IA astrológica"
+            "/chat": "POST - Chat com IA astrológica",
+            "/generate-report": "POST - Gerar relatório completo em PDF"
         }
     }
     
@@ -870,6 +884,170 @@ async def delete_conversation(
     db.commit()
     
     return {"message": "Conversa deletada com sucesso"}
+
+# ========= Endpoint de Geração de Relatório (JSON) =========
+
+from report_prompt import get_report_prompt
+import re
+
+class AnalysisResponse(BaseModel):
+    name: str
+    birth_data: Dict
+    map_data: Dict
+    sections: Dict[str, str]
+    question: Optional[str] = None
+
+@app.post("/generate-report", response_model=AnalysisResponse)
+async def generate_report_endpoint(request: ReportRequest):
+    """
+    Gera análise astrológica completa e retorna JSON.
+    
+    Fluxo:
+    1. Calcula mapa astral
+    2. Gera análise completa com IA (9 seções)
+    3. Retorna JSON estruturado para exibição no frontend
+    """
+    if not GOOGLE_API_KEY:
+        raise HTTPException(status_code=503, detail="Serviço de IA não configurado. Configure GOOGLE_API_KEY.")
+    
+    try:
+        # 1. Calcular mapa astral
+        birth_data = BirthData(
+            date=request.date,
+            time=request.time,
+            city=request.city,
+            country=request.country
+        )
+        map_result = calculate_map(birth_data)
+        
+        # 2. Preparar dados para a IA
+        map_data_dict = {
+            "positions": [p.dict() for p in map_result.positions],
+            "houses": [h.dict() for h in map_result.houses],
+            "aspects": [a.dict() for a in map_result.aspects],
+            "elements": map_result.elements,
+            "quadruplicities": map_result.quadruplicities
+        }
+        
+        # 3. Gerar prompt estruturado
+        prompt = get_report_prompt(request.name, map_data_dict, request.question)
+        
+        # 4. Enviar para IA e obter análise completa
+        model = genai.GenerativeModel('gemini-2.5-flash')
+        response = model.generate_content(prompt)
+        
+        # 5. Parsear resposta da IA em seções
+        analysis_text = response.text
+        
+        # Extrair seções do HTML retornado pela IA
+        sections = {
+            'visao_geral': extract_section(analysis_text, 'VISÃO GERAL', 'ANÁLISE DA TRÍADE'),
+            'triade_principal': extract_section(analysis_text, 'TRÍADE PRINCIPAL', 'PLANETAS PESSOAIS'),
+            'planetas_pessoais': extract_section(analysis_text, 'PLANETAS PESSOAIS', 'JÚPITER E SATURNO'),
+            'jupiter_saturno': extract_section(analysis_text, 'JÚPITER E SATURNO', 'MEIO-CÉU'),
+            'meio_ceu': extract_section(analysis_text, 'MEIO-CÉU', 'CASAS ASTROLÓGICAS'),
+            'casas': extract_section(analysis_text, 'CASAS ASTROLÓGICAS', 'PRINCIPAIS ASPECTOS'),
+            'aspectos': extract_section(analysis_text, 'PRINCIPAIS ASPECTOS', 'PONTOS KÁRMICOS'),
+            'pontos_karmicos': extract_section(analysis_text, 'PONTOS KÁRMICOS', 'RESPOSTA À PERGUNTA' if request.question else None),
+        }
+        
+        if request.question:
+            sections['resposta_pergunta'] = extract_section(analysis_text, 'RESPOSTA À PERGUNTA', None)
+        
+        # 6. Retornar JSON estruturado
+        return AnalysisResponse(
+            name=request.name,
+            birth_data={
+                "date": request.date,
+                "time": request.time,
+                "city": request.city,
+                "country": request.country
+            },
+            map_data=map_data_dict,
+            sections=sections,
+            question=request.question
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao gerar relatório: {str(e)}")
+
+def extract_section(text: str, start_marker: str, end_marker: str = None) -> str:
+    """
+    Extrai uma seção do texto da IA baseado em marcadores
+    """
+    try:
+        # Procurar pelo marcador de início (case insensitive)
+        start_pattern = re.compile(re.escape(start_marker), re.IGNORECASE)
+        start_match = start_pattern.search(text)
+        
+        if not start_match:
+            return f"<p>Seção {start_marker} não encontrada na análise.</p>"
+        
+        start_pos = start_match.end()
+        
+        # Se houver marcador de fim, procurar por ele
+        if end_marker:
+            end_pattern = re.compile(re.escape(end_marker), re.IGNORECASE)
+            end_match = end_pattern.search(text, start_pos)
+            if end_match:
+                return text[start_pos:end_match.start()].strip()
+        
+        # Se não houver marcador de fim, pegar até o final
+        return text[start_pos:].strip()
+        
+    except Exception as e:
+        return f"<p>Erro ao extrair seção: {str(e)}</p>"
+
+# ========= Endpoint de Geração de SVG do Mapa Astral =========
+
+class ChartSVGRequest(BaseModel):
+    name: str
+    date: str      # Formato DD/MM/YYYY
+    time: str      # Formato HH:MM
+    city: str
+    country: str
+    custom_colors: Optional[bool] = True  # Se True, usa cores do Portal Urano
+
+@app.post("/generate-chart-svg")
+async def generate_chart_svg_endpoint(request: ChartSVGRequest):
+    """
+    Gera gráfico SVG do mapa astral
+    
+    Retorna um SVG customizável com as cores do Portal Urano
+    """
+    try:
+        # Configurar cores customizadas
+        colors = None
+        if request.custom_colors:
+            colors = CustomChartColors()
+            # Personalizar com as cores do Portal Urano
+            colors.zodiac_ring_color = "#893f89"  # Roxo do Portal
+            colors.fire_color = "#FF6B6B"
+            colors.earth_color = "#8B4513"
+            colors.air_color = "#87CEEB"
+            colors.water_color = "#4682B4"
+        
+        # Gerar SVG
+        svg_content = generate_chart_svg_from_birth_data(
+            name=request.name,
+            date=request.date,
+            time=request.time,
+            city=request.city,
+            country=request.country,
+            custom_colors=colors
+        )
+        
+        # Retornar SVG como resposta
+        return Response(
+            content=svg_content,
+            media_type="image/svg+xml",
+            headers={
+                "Content-Disposition": f"inline; filename=mapa_astral_{request.name.replace(' ', '_')}.svg"
+            }
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao gerar gráfico SVG: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

@@ -17,35 +17,12 @@
     }
 }
 
-@font-face {
-    font-family: 'TAN AEGEAN';
-    src: url('/TANaegean.ttf');
-}
-
-body {
-    color: #a3a2a2;
-    background-color: #111111;
-    background-image: url('/stars_background.png');
-    background-size: cover;
-    background-position: center;
-    background-attachment: fixed;
-    font-family: var(--font-outfit), sans-serif;
-    display: flex;
-    min-height: 100vh;
-    margin: 0;
-    padding: 0;
-    overflow: hidden;
-}
-
-/* ========= SIDEBAR ========= */
-.sidebar {
-    width: 280px;
-    background-color: #111111;
-    border-right: 1px solid #333;
-    display: flex;
-    flex-direction: column;
-    height: 100vh;
-    flex-shrink: 0;
+background-color: #111111;
+border-right: 1px solid #333;
+display: flex;
+flex-direction: column;
+height: 100vh;
+flex-shrink: 0;
 }
 
 .sidebar-header {
@@ -157,25 +134,9 @@ body {
     transition: all 0.2s ease;
 }
 
-.logout-button:hover {
-    background-color: #000000;
-    border-color: #666;
-}
-
-/* ========= MAIN CONTENT ========= */
-.main-content {
-    flex: 1;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-}
-
-/* ========= HOME PAGE ========= */
-.page {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    width: 100%;
+flex-direction: column;
+height: 100%;
+width: 100%;
 }
 
 .texture-banner {
