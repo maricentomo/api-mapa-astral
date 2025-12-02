@@ -56,7 +56,7 @@ export default function RelatorioPage() {
             const year = dateObj.getFullYear();
             const formattedDate = `${day}/${month}/${year}`;
 
-            const response = await fetch('http://localhost:8000/generate-report', {
+            const response = await fetch('/api/generate-report', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -78,7 +78,7 @@ export default function RelatorioPage() {
 
             // Buscar gráfico SVG
             try {
-                const svgResponse = await fetch('http://localhost:8000/generate-chart-svg', {
+                const svgResponse = await fetch('/api/generate-chart-svg', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
